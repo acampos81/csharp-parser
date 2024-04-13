@@ -1,15 +1,12 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 namespace CSharpParser
 {
   public interface ITokenizer
   {
-    void      Advance();
+    Task      Start();
     bool      HasMoreTokens();
+    void      Advance();
     TokenType GetTokenType();
     KeyWord   GetKeyWord();
     char      GetSymbol();
