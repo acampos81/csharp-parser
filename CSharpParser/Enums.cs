@@ -1,23 +1,41 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace CSharpParser
+﻿namespace CSharpParser
 {
+  public enum NonTerminals
+  {
+    USING_DIRECTIVE,
+    NAMESPACE,
+    CLASS,
+    CLASS_VAR_DECLARATION,
+    CONSTRUCTOR_DECLARATION,
+    CONTRUCTOR_BODY,
+    FUNCTION_DECLRATION,
+    FUNCTION_BODY,
+    PARAMETER_LIST,
+    LOCAL_VAR_DECLARATION,
+    STATEMENTS,
+    IF_STATEMENT,
+    SWITCH_STATEMENT,
+    FOR_STATEMENT,
+    FOR_EACH_STATMENT,
+    WHILE_STATEMENT,
+    DO_STATEMENT,
+    EXPRESSION,
+    TERM
+  }
+
   public enum TokenType
   {
+    NONE,
     KEYWORD,
     SYMBOL,
     IDENTIFIER,
-    INT_CONST,
-    STRING_CONST,
-    FLOAT_CONST,
+    NUM_CONST,
+    STRING_CONST
   }
 
-  public enum KeyWord
+  public enum KeywordType
   {
+    NONE,
     ABSTRACT,
     AS,
     BASE,
@@ -65,6 +83,7 @@ namespace CSharpParser
     OUT,
     OVERRIDE,
     PARAMS,
+    PARTIAL,
     PRIVATE,
     PROTECTED,
     PUBLIC,
@@ -95,5 +114,12 @@ namespace CSharpParser
     VOID,
     VOLATILE,
     WHILE
+  }
+
+  public enum CommentType
+  {
+    NONE,
+    LINE,
+    BLOCK
   }
 }

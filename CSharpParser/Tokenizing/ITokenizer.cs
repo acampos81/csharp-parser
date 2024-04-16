@@ -4,15 +4,14 @@ namespace CSharpParser
 {
   public interface ITokenizer
   {
-    Task      Start();
-    bool      HasMoreTokens();
-    void      Advance();
-    TokenType GetTokenType();
-    KeyWord   GetKeyWord();
-    char      GetSymbol();
-    string    GetIdentifier();
-    int       GetIntValue();
-    float     GetSingleValue();
-    string    GetStringValue();
+    bool        HasMoreTokens();
+    void        Advance();
+    TokenType   CurrentTokenType();
+    TokenType   NextTokenType();
+    KeywordType CurrentKeywordType();
+    KeywordType NextKeywordType();
+    T           CurrentValue<T>();
+    T           NextValue<T>();
+    Task        Start(string filePath);
   }
 }

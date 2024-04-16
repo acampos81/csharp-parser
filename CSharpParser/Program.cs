@@ -14,7 +14,7 @@ namespace CSharpParser
       //CreateFiles();
 
       //*
-      List<Task> tokenizationTasks = new List<Task>();
+      List<Task<ITokenizer>> tokenizationTasks = new List<Task<ITokenizer>>();
       for (int i = 0; i < args.Length; i++)
       {
         string path = args[i];
@@ -38,19 +38,31 @@ namespace CSharpParser
 
       while(tokenizationTasks.Count > 0)
       {
-        Task task = await Task.WhenAny(tokenizationTasks);
-        await task;
+        Task<ITokenizer> tokenizerTask = await Task.WhenAny(tokenizationTasks);
+        await tokenizerTask;
+
+        //ITokenizer tokenizer = tokenizerTask.Result;
+        //while(tokenizer.HasMoreTokens())
+        //{
+        //  tokenizer.Advance();
+        //  Console.WriteLine($"{tokenizer.GetTokenType()}: {tokenizer.GetValue()}");
+        //}
+
+        XmlCompiler compiler = new XmlCompiler(tokenizerTask.Result);
+        await compiler.Start();
       }
       //*/
     }
 
-    static async Task Tokenize(string filePath)
+    static async Task<ITokenizer> Tokenize(string filePath)
     {
-      ITokenizer tokenizer = new Tokenizer(filePath);
-      await tokenizer.Start().ConfigureAwait(false);
+      ITokenizer tokenizer = new Tokenizer();
+      await tokenizer.Start(filePath).ConfigureAwait(false);
+      return tokenizer;
     }
 
-    static void CreateFiles(string[] args)
+    /*
+    static void CreateTestFiles(string[] args)
     {
       string path = args[0];
 
@@ -106,5 +118,6 @@ namespace CSharpParser
         fs.Write(info, 0, info.Length);
       }
     }
+    */
   }
 }

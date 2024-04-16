@@ -1,42 +1,29 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
+﻿using System.IO;
 using System.Text;
 using System.Threading.Tasks;
+using System.Collections.Generic;
+using System;
 
 namespace CSharpParser
 {
   class Tokenizer : ITokenizer
   {
-    private struct Token
+    private class Token
     {
       public TokenType type;
-      public KeyWord keyword;
+      public KeywordType keyword;
       public object value;
     }
 
-    private enum CommentType
-    {
-      NONE,
-      LINE,
-      BLOCK
-    }
-
-    private string _filePath;
     private Queue<Token> _tokens;
     private Token _currentToken;
+    private Token _nextToken;
     private CommentType _commentType;
 
-
-    public Tokenizer(string filePath)
+    #region Interface Methods
+    public async Task Start(string filePath)
     {
-      _filePath = filePath;
-    }
-  
-
-    public async Task Start()
-    {
-      using(StreamReader reader = new StreamReader(_filePath))
+      using(StreamReader reader = new StreamReader(filePath))
       {
         string line;
         _tokens = new Queue<Token>();
@@ -52,6 +39,8 @@ namespace CSharpParser
           {
             char c = line[i];
 
+            // If currently in a comment block (/*...*/) check if the current and next characters
+            // are the end of the block (*/).  If not, continue ignoring characters.
             if(_commentType == CommentType.BLOCK)
             {
               if(IsBlockCommentEnd(line, i, c))
@@ -62,37 +51,42 @@ namespace CSharpParser
               continue;
             }
             
-            if(IsCommentStart(line, i, c, out CommentType ct))
+            // If the current and next characters signal the start of a comment, handle according
+            // to the comment type.
+            if(IsCommentStart(line, i, c, out _commentType))
             {
-              _commentType = ct;
               if(_commentType == CommentType.LINE)
               {
+                // If it's a line comment (//), tokenize the string buffer if greater than 0, and move on to the next line.
+                if(sb.Length > 0)
+                {
+                  TokenizeString(sb);
+                }
                 break;
               }
               else
               {
+                // If it's a block comment (/*...*/) continue evaluating characters on this and subsequent lines,
+                // looking for the end characters (*/) until the end of the current line.
                 continue;
               }
             }
 
-            bool isWhiteSpace = IsWhiteSpace(c);
-            bool isSymbol = IsSymbol(c);
-            bool isEndOfLine = i == line.Length-1;
-
-            if(isWhiteSpace || isSymbol || isEndOfLine)
+            if(IsWhiteSpace(c))
             {
               if(sb.Length > 0)
               {
-                if(isSymbol == false) sb.Append(c);
-
-                _tokens.Enqueue(new Token { value = sb.ToString() });
-                sb.Clear();
+                TokenizeString(sb);
               }
-
-              if(isSymbol)
+            }
+            else if(IsSymbol(c))
+            {
+              if(sb.Length > 0)
               {
-                _tokens.Enqueue(new Token { value = c });
+                TokenizeString(sb);
               }
+
+              TokenizeSymbol(c);
             }
             else
             {
@@ -100,19 +94,19 @@ namespace CSharpParser
             }
           }
 
-          sb.Clear();
+          // Tokenize any string remaining in the buffer after the current line loop ends
+          if(sb.Length > 0)
+          {
+            TokenizeString(sb);
+          }
 
+          // If the last line was, or contained part of a line comment, reset the comment
+          // type to none since line comments don't carry over to subsequent lines.
           if(_commentType == CommentType.LINE)
           {
             _commentType = CommentType.NONE;
           }
         }
-      }
-
-      while(_tokens.Count > 0)
-      {
-        Token t = _tokens.Dequeue();
-        Console.WriteLine(t.value);
       }
     }
 
@@ -124,43 +118,76 @@ namespace CSharpParser
     public void Advance()
     {
       _currentToken = _tokens.Dequeue();
+      _nextToken = HasMoreTokens() ? _tokens.Peek() : null;
     }
 
-    public TokenType GetTokenType()
+    public TokenType CurrentTokenType()
     {
       return _currentToken.type;
     }
 
-    public KeyWord GetKeyWord()
+    public TokenType NextTokenType()
+    {
+      return _nextToken != null ? _nextToken.type : TokenType.NONE;
+    }
+
+    public KeywordType CurrentKeywordType()
     {
       return _currentToken.keyword;
     }
 
-    public char GetSymbol()
+    public KeywordType NextKeywordType()
     {
-      return (char)_currentToken.value;
+      return _nextToken != null ? _nextToken.keyword : KeywordType.NONE;
     }
 
-    public string GetIdentifier()
+    public T CurrentValue<T>()
     {
-      return (string)_currentToken.value;
+      return (T)_currentToken.value;
     }
 
-    public int GetIntValue()
+    public T NextValue<T>()
     {
-      return (int)_currentToken.value;
+      return _nextToken != null ? (T)_nextToken.value : default(T);
+    }
+    #endregion
+
+    #region Tokenizing
+    private void TokenizeString(StringBuilder sb)
+    {
+      string strValue = sb.ToString();
+      sb.Clear();
+
+      Token t = new Token() { value = strValue };
+
+      if(IsKeyword(strValue))
+      {
+        t.keyword = Enum.Parse<KeywordType>(strValue, true);
+        t.type = TokenType.KEYWORD;
+      }
+      else if(IsNumConst(strValue))
+      {
+        t.type = TokenType.NUM_CONST;
+      }
+      else if(IsStringConst(strValue))
+      {
+        t.type = TokenType.STRING_CONST;
+      }
+      else
+      {
+        t.type = TokenType.IDENTIFIER;
+      }
+
+      _tokens.Enqueue(t);
     }
 
-    public float GetSingleValue()
+    private void TokenizeSymbol(char c)
     {
-      return (float)_currentToken.value;
+      _tokens.Enqueue(new Token { type = TokenType.SYMBOL, value = c});
     }
+    #endregion
 
-    public string GetStringValue()
-    {
-      return (string)_currentToken.value;
-    }
-
+    #region Validators
     private bool IsWhiteSpace(char c)
     {
       for (int i = 0; i < Grammar.whiteSpace.Length; i++)
@@ -177,6 +204,25 @@ namespace CSharpParser
         if (c.Equals(Grammar.symbols[i])) return true;
       }
       return false;
+    }
+
+    private bool IsKeyword(string str)
+    {
+      for(int i=0; i<Grammar.keywords.Length; i++)
+      {
+        if (str.Equals(Grammar.keywords[i])) return true;
+      }
+      return false;
+    }
+
+    private bool IsNumConst(string str)
+    {
+      return int.TryParse(str, out _);
+    }
+
+    private bool IsStringConst(string str)
+    {
+      return str.StartsWith('"') && str.EndsWith('"');
     }
 
     private bool IsCommentStart(string line, int charIndex, char currentChar, out CommentType commentType)
@@ -222,5 +268,6 @@ namespace CSharpParser
         return false;
       }
     }
+    #endregion
   }
 }
