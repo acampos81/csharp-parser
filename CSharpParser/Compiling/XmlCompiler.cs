@@ -1,6 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -486,7 +484,7 @@ namespace CSharpParser
 
         // Return type comes after access and member modifiers
         tt = _tokenizer.GetTokenType();
-        if(kt.Equals(KeywordType.VOID) || tt == TokenType.IDENTIFIER)
+        if(kt.Equals(KeywordType.VOID) || IsBuiltInType(kt) || tt == TokenType.IDENTIFIER)
         {
           string kStr = _tokenizer.GetValue<string>();
           InLineTags(localBuilder, tt.ToString(), kStr, depth+1);
