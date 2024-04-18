@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -18,71 +19,126 @@ namespace CSharpParser
 
     public async Task Start()
     {
-      CompileStatements(_tagBuilder, 0);
-
-      if(_tagBuilder.Length > 0)
+      try
       {
-        Console.WriteLine(_tagBuilder.ToString());
-        _tagBuilder.Clear();
+        CompileClassStatements(_tagBuilder, 0);
+
+        if(_tagBuilder.Length > 0)
+        {
+          Console.WriteLine(_tagBuilder.ToString());
+          _tagBuilder.Clear();
+        }
+      }
+      catch(Exception e)
+      {
+        Console.WriteLine(e);
       }
     }
 
-    public void CompileStatements(StringBuilder tagBuilder, int depth)
+    private void CompileClassStatements(StringBuilder tagBuilder, int depth)
     {
       if(_tokenizer.HasMoreTokens())
       {
         _tokenizer.Advance();
 
-        try
+        if( 
+            CompileUsingDirective(tagBuilder, depth)           ||
+            CompileNamespaceDeclaration(tagBuilder, depth)     ||
+            CompileClassDeclaration(tagBuilder, depth)         ||
+            CompileClassConstructor(tagBuilder, depth)         ||
+            CompileClassVariableDeclaration(tagBuilder, depth) ||
+            CompileFunctionDeclaration(tagBuilder, depth)      ||
+            CompileLocalVariableDeclaration(tagBuilder, depth) ||
+            //CompileIfStatement(tagBuilder, depth)              ||
+            //CompileForLoop(tagBuilder, depth)                  ||
+            CompileFunctionCall(tagBuilder, depth)
+            )
         {
-          if( CompileUsingDirective(tagBuilder, depth) ||
-              CompileNamespaceDeclaration(tagBuilder, depth) ||
-              CompileClassDeclaration(tagBuilder, depth))
-          {
-            CompileStatements(tagBuilder, depth);
-          }
-        }
-        catch(Exception e)
-        {
-          Console.WriteLine(e);
+          CompileClassStatements(tagBuilder, depth);
         }
       }
     }
 
-    public void CompileStatementSequence()
+    private void CompileFunctionStatements(StringBuilder tagBuilder, int depth)
     {
 
     }
 
-    public bool CompileUsingDirective(StringBuilder tagBuilder, int depth)
+    private bool CompileStatementSequence(StringBuilder tagBuilder, int depth)
     {
-      TokenType   tt = _tokenizer.CurrentTokenType();
-      KeywordType kt = _tokenizer.CurrentKeywordType();
+      TokenType tt = _tokenizer.GetTokenType();
+
+      if(tt == TokenType.SYMBOL)
+      {
+        char c = _tokenizer.GetValue<char>();
+
+        if(c.Equals('{'))
+        {
+          StringBuilder localBuilder = new StringBuilder();
+
+          OpenTag(localBuilder, "statementSequence", depth, false);
+
+          if(CompileSymbol(localBuilder, '{', depth+1) == false)
+          {
+            throw new Exception(Constants.SyntaxError);
+          }
+
+          CompileClassStatements(localBuilder, depth+1);
+
+          if(CompileSymbol(localBuilder, '}', depth+1) == false)
+          {
+            throw new Exception(Constants.SyntaxError);
+          }
+
+          CloseTag(localBuilder, "statementSequence", depth);
+
+          tagBuilder.Append(localBuilder.ToString());
+
+          localBuilder.Clear();
+
+          return true;
+        }
+      }
+
+      return false;
+    }
+
+    private bool CompileUsingDirective(StringBuilder tagBuilder, int depth)
+    {
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
 
       if(tt == TokenType.KEYWORD && kt == KeywordType.USING)
       {
-        string kWord = _tokenizer.CurrentValue<string>();
+        StringBuilder localBuilder = new StringBuilder();
+
+        string kWord = _tokenizer.GetValue<string>();
 
         // <directive>
-        OpenTag(tagBuilder, "directive", depth, inLine:false);
+        OpenTag(localBuilder, "directive", depth, inLine:false);
 
-        InLineTags(tagBuilder, tt.ToString(), kWord, depth+1);
-
-        AdvanceStreamWithException();
-
-        bool success = CompileIdentifier(tagBuilder, depth+1);
+        InLineTags(localBuilder, tt.ToString(), kWord, depth+1);
 
         AdvanceStreamWithException();
 
-        success &= CompileSymbol(tagBuilder, ';', depth+1);
+        bool success = CompileIdentifier(localBuilder, depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileSymbol(localBuilder, ';', depth+1);
 
         if(success == false)
         {
-          throw new Exception(Constants.UnexpectedSyntaxError);
+          Console.WriteLine(localBuilder.ToString());
+          throw new Exception(Constants.SyntaxError);
         }
 
         // </directive>
-        CloseTag(tagBuilder, "directive", depth);
+        CloseTag(localBuilder, "directive", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
 
         return true;
       }
@@ -90,47 +146,44 @@ namespace CSharpParser
       return false;
     }
 
-    public void CompileUsingAlias()
+    private bool CompileNamespaceDeclaration(StringBuilder tagBuilder, int depth)
     {
-
-    }
-
-    public bool CompileNamespaceDeclaration(StringBuilder tagBuilder, int depth)
-    {
-      TokenType   tt = _tokenizer.CurrentTokenType();
-      KeywordType kt = _tokenizer.CurrentKeywordType();
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
 
       if(tt == TokenType.KEYWORD && kt == KeywordType.NAMESPACE)
       {
+        StringBuilder localBuilder = new StringBuilder();
+
         string ktStr = kt.ToString();
-        string kWord = _tokenizer.CurrentValue<string>();
+        string kWord = _tokenizer.GetValue<string>();
 
         // <namespace>
-        OpenTag(tagBuilder, ktStr, depth, inLine:false);
+        OpenTag(localBuilder, ktStr, depth, inLine:false);
 
-        InLineTags(tagBuilder, tt.ToString(), kWord, depth+1);
-
-        AdvanceStreamWithException();
-
-        bool success = true;
-        
-        success &= CompileIdentifier(tagBuilder, depth+1);
+        InLineTags(localBuilder, tt.ToString(), kWord, depth+1);
 
         AdvanceStreamWithException();
 
-        success &= CompileSymbol(tagBuilder, '{', depth+1);
+        bool success = CompileIdentifier(localBuilder, depth+1);
 
-        CompileStatements(tagBuilder, depth+1);
+        AdvanceStreamWithException();
 
-        success &= CompileSymbol(tagBuilder, '}', depth+1);
+        success &= CompileStatementSequence(localBuilder, depth+1);
 
         if(success == false)
         {
-          throw new Exception(Constants.UnexpectedSyntaxError);
+          Console.WriteLine(localBuilder.ToString());
+          localBuilder.Clear();
+          throw new Exception(Constants.SyntaxError);
         }
 
         // </namespace>
-        CloseTag(tagBuilder, ktStr, depth);
+        CloseTag(localBuilder, ktStr, depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
 
         return true;
       }
@@ -138,104 +191,247 @@ namespace CSharpParser
       return false;
     }
 
-    public bool CompileClassDeclaration(StringBuilder tagBuilder, int depth)
+    private bool CompileClassDeclaration(StringBuilder tagBuilder, int depth)
     {
-      TokenType   tt = _tokenizer.CurrentTokenType();
+      // Look ahead to count access and class modifiers in order to find the class keyword and class name identifier
+      int  lookAheadCount            = GetAccessModifierCount();
+      lookAheadCount                += GetClassModifierCount();
+      bool isClassDeclarationSyntax  = KeywordLookAhead(maxIterations:lookAheadCount, LookAheadMatch.ANY, KeywordType.CLASS);
+      isClassDeclarationSyntax      &= TokenTypeLookAhead(maxIterations:lookAheadCount+1, LookAheadMatch.ANY, TokenType.IDENTIFIER);
 
-      if(tt == TokenType.KEYWORD)
+      if(isClassDeclarationSyntax)
       {
+        StringBuilder localBuilder = new StringBuilder();
+        
         // <class>
-        OpenTag(tagBuilder, KeywordType.CLASS.ToString(), depth, false);
+        OpenTag(localBuilder, KeywordType.CLASS.ToString(), depth, false);
 
-        /* Class declarations in C# support a mix of access, and class modifiers (i.e. "partial static public", or "static internal")
+        /* Class declarations in C# support a mix of access, and class modifiers (e.g. "partial static public", or "static internal")
          * A comprehensive compilation of legal combinations is beyond the scope of this version of the parser. For the time being
          * modifers are gathered in the order they're found before the "class" keyword. */
-        KeywordType kt = _tokenizer.CurrentKeywordType();
+        TokenType   tt = _tokenizer.GetTokenType();
+        KeywordType kt = _tokenizer.GetKeywordType();
         while(IsAccessModifier(kt) || IsClassModifier(kt))
         {
-          string kStr = _tokenizer.CurrentValue<string>();
-          InLineTags(tagBuilder, tt.ToString(), kStr, depth+1);
+          string kStr = _tokenizer.GetValue<string>();
+          InLineTags(localBuilder, tt.ToString(), kStr, depth+1);
           AdvanceStreamWithException();
-          kt = _tokenizer.CurrentKeywordType();
+          kt = _tokenizer.GetKeywordType();
         }
 
-        bool success = CompileKeyWord(tagBuilder, KeywordType.CLASS, depth+1);
+        bool success = CompileKeyWord(localBuilder, KeywordType.CLASS, depth+1);
 
         AdvanceStreamWithException();
 
-        success &= CompileIdentifier(tagBuilder, depth+1);
+        success &= CompileIdentifier(localBuilder, depth+1);
 
         AdvanceStreamWithException();
 
         // Derived type compilation
-        if(CompileSymbol(tagBuilder, ':', depth+1))
+        if(CompileSymbol(localBuilder, ':', depth+1))
         {
           AdvanceStreamWithException();
 
-          success &= CompileIdentifier(tagBuilder, depth+1);
+          success &= CompileIdentifier(localBuilder, depth+1);
 
           AdvanceStreamWithException();
         }
 
-        success &= CompileSymbol(tagBuilder, '{', depth+1);
-        
-        CompileStatements(tagBuilder, depth+1);
-
-        success &= CompileSymbol(tagBuilder, '}', depth+1);
+        success &= CompileStatementSequence(localBuilder, depth+1);
 
         if(success == false)
         {
-          throw new Exception(Constants.UnexpectedSyntaxError);
+          Console.WriteLine(localBuilder.ToString());
+          localBuilder.Clear();
+          throw new Exception(Constants.SyntaxError);
         }
 
         // </class>
-        CloseTag(tagBuilder, KeywordType.CLASS.ToString(), depth);
+        CloseTag(localBuilder, KeywordType.CLASS.ToString(), depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
         return true;
       }
 
       return false;
     }
 
-    private bool IsAccessModifier(KeywordType kt)
+    private bool CompileClassConstructor(StringBuilder tagBuilder, int depth)
     {
-      return
-        kt == KeywordType.PUBLIC    ||
-        kt == KeywordType.PRIVATE   ||
-        kt == KeywordType.INTERNAL  ||
-        kt == KeywordType.PROTECTED ||
-        kt == KeywordType.SEALED;
+      TokenType tt   = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      // A constructor can have 0 or 1 access modifiers before its declaration.
+      int lookAheadCount        = GetAccessModifierCount();
+      bool isConstructorSyntax  = TokenTypeLookAhead(maxIterations:lookAheadCount, LookAheadMatch.ANY, TokenType.IDENTIFIER);
+      isConstructorSyntax      |= tt == TokenType.IDENTIFIER;
+      isConstructorSyntax      &= SymbolLookAhead(maxIterations:lookAheadCount+1, LookAheadMatch.ANY, '(');
+
+      if(isConstructorSyntax)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+
+        // <constructor>
+        OpenTag(localBuilder, "constructor", depth, false);
+
+        // Constructor declarations in C# can support 0 or 1 modifiers
+        kt = _tokenizer.GetKeywordType();
+        if(IsAccessModifier(kt))
+        {
+          string kStr = _tokenizer.GetValue<string>();
+          InLineTags(localBuilder, tt.ToString(), kStr, depth+1);
+
+          AdvanceStreamWithException();
+        }
+
+        bool success = CompileIdentifier(localBuilder, depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileParameterList(localBuilder, depth+1);
+
+        AdvanceStreamWithException();
+
+        // Base constructor look head
+        tt = _tokenizer.GetTokenType();
+
+        if(tt == TokenType.SYMBOL)
+        {
+          char sym = _tokenizer.GetValue<char>();
+          if(sym.Equals(':'))
+          {
+            CompileSymbol(localBuilder, ':', depth+1);
+
+            AdvanceStreamWithException();
+
+            kt = _tokenizer.GetKeywordType();
+
+            success &= CompileKeyWord(localBuilder, kt, depth+1);
+
+            AdvanceStreamWithException();
+
+            success &= CompileParameterList(localBuilder, depth+1);
+
+            AdvanceStreamWithException();
+          }
+        }
+
+        success &= CompileStatementSequence(localBuilder, depth+1);
+
+        if(success == false)
+        {
+          Console.WriteLine(localBuilder.ToString());
+          localBuilder.Clear();
+          throw new Exception(Constants.SyntaxError);
+        }
+
+        // </contructor>
+        CloseTag(localBuilder, "constructor", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
-    private bool IsClassModifier(KeywordType kt)
+    private bool CompileClassVariableDeclaration(StringBuilder tagBuilder, int depth)
     {
-      return
-        kt == KeywordType.STATIC  ||
-        kt == KeywordType.PARTIAL ||
-        kt == KeywordType.ABSTRACT;
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      // Class variables cannot be declared with the var keyword.
+      if(tt == TokenType.KEYWORD && kt == KeywordType.VAR)
+      {
+        return false;
+      }
+
+      /* Get the number of any access modifiers that exist
+       * Look ahead +1 to to skip over the return type.  
+       * Look ahead +2 to get supported class variable symbols that should follow an identifier */
+      int  lookAheadCount         = GetAccessModifierCount();
+      bool isClassVariableSyntax  = TokenTypeLookAhead(lookAheadCount + 1, LookAheadMatch.ANY, TokenType.IDENTIFIER);
+      isClassVariableSyntax      &= SymbolLookAhead(lookAheadCount + 2, LookAheadMatch.ANY, '=', ';');
+
+      if(isClassVariableSyntax)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+
+        // <variable>
+        OpenTag(localBuilder, "variable", depth, false);
+
+        BuildGeneralStatement(localBuilder, depth+1, ';');
+
+        AdvanceStreamWithException();
+
+        CompileSymbol(localBuilder, ';', depth+1);
+
+        // </variable>
+        CloseTag(localBuilder, "variable", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
-    private bool IsModifier(KeywordType kt)
+    private bool CompileLocalVariableDeclaration(StringBuilder tagBuilder, int depth)
     {
-      return
-        kt == KeywordType.STATIC   ||
-        kt == KeywordType.ABSTRACT ||
-        kt == KeywordType.CONST    ||
-        kt == KeywordType.VIRTUAL;
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      // Local variable can start with a type identifier followed by an assingment expression, or a built-in keyword.
+      bool isLocalVariableSyntax = false;
+      if(tt == TokenType.IDENTIFIER)
+      {
+        isLocalVariableSyntax = SymbolLookAhead(maxIterations:1, LookAheadMatch.ANY, '=');
+      }
+      else if(tt == TokenType.KEYWORD)
+      {
+        isLocalVariableSyntax |= (kt == KeywordType.CONST);
+        isLocalVariableSyntax |= (kt == KeywordType.VAR);
+        isLocalVariableSyntax |= IsBuiltInType(kt);
+      }
+
+      if(isLocalVariableSyntax)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+
+        // <variable>
+        OpenTag(localBuilder, "variable", depth+1, false);
+
+        BuildGeneralStatement(localBuilder, depth+1, ';');
+
+        AdvanceStreamWithException();
+
+        CompileSymbol(localBuilder, ';', depth+1);
+
+        // </variable>
+        CloseTag(localBuilder, "variable", depth+1);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
-    public void CompileClassConstructor(StringBuilder tagBuilder, int depth)
+    private bool CompileIdentifier(StringBuilder tagBuilder, int depth)
     {
-
-    }
-
-
-    public void CompileVariableDeclaration()
-    {
-    }
-
-    public bool CompileIdentifier(StringBuilder tagBuilder, int depth)
-    {
-      TokenType tt = _tokenizer.CurrentTokenType();
+      TokenType tt = _tokenizer.GetTokenType();
 
       if(tt == TokenType.IDENTIFIER)
       {
@@ -248,94 +444,203 @@ namespace CSharpParser
       return false;
     }
 
-    private void BuildIdentifier(StringBuilder idBuilder, TokenType expectedTokenType)
+    private bool CompileFunctionDeclaration(StringBuilder tagBuilder, int depth)
     {
-      if(expectedTokenType == TokenType.IDENTIFIER)
+      int lookAheadCount     = GetAccessModifierCount();
+      bool isFunctionSyntax  = KeywordLookAhead(maxIterations:lookAheadCount, LookAheadMatch.ANY, KeywordType.VOID);
+      isFunctionSyntax      |= TokenTypeLookAhead(maxIterations:lookAheadCount+1, LookAheadMatch.ANY, TokenType.IDENTIFIER);
+      isFunctionSyntax      &= SymbolLookAhead(maxIterations:lookAheadCount+2, LookAheadMatch.ANY, '(');
+
+      if (isFunctionSyntax)
       {
-        idBuilder.Append(_tokenizer.CurrentValue<string>());
-        if(_tokenizer.HasMoreTokens())
+        StringBuilder localBuilder = new StringBuilder();
+
+        //<function>
+        OpenTag(localBuilder, "function", depth, false);
+
+        TokenType   tt = _tokenizer.GetTokenType();
+        KeywordType kt = _tokenizer.GetKeywordType();
+
+        /* Function declarations in C# support mix of keywords and identifiers (e.g. "public override void", or "static private MyType")
+         * A comprehensive compilation of legal combinations is beyond the scope of this version of the parser. For the time being
+         * keywords are gathered in the order they're found before the function identifier*/
+        while(IsAccessModifier(kt) || IsMemberModifier(kt))
         {
-          if(_tokenizer.NextTokenType() == TokenType.SYMBOL)
+          string kStr = _tokenizer.GetValue<string>();
+          InLineTags(localBuilder, tt.ToString(), kStr, depth+1);
+          AdvanceStreamWithException();
+          kt = _tokenizer.GetKeywordType();
+        }
+
+        // Return type comes after access and member modifiers
+        tt = _tokenizer.GetTokenType();
+        if(kt.Equals(KeywordType.VOID) || tt == TokenType.IDENTIFIER)
+        {
+          string kStr = _tokenizer.GetValue<string>();
+          InLineTags(localBuilder, tt.ToString(), kStr, depth+1);
+          AdvanceStreamWithException();
+        }
+        else
+        {
+          throw new Exception(Constants.SyntaxError);
+        }
+
+        bool success = CompileIdentifier(localBuilder, depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileParameterList(localBuilder, depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileStatementSequence(localBuilder, depth+1);
+
+        if(success == false)
+        {
+          Console.WriteLine(localBuilder.ToString());
+          throw new Exception(Constants.SyntaxError);
+        }
+
+        // </function>
+        CloseTag(localBuilder, "function", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
+    }
+
+    private bool CompileParameterList(StringBuilder tagBuilder, int depth)
+    {
+      TokenType tt = _tokenizer.GetTokenType();
+
+      if(tt == TokenType.SYMBOL)
+      {
+        char sym = _tokenizer.GetValue<char>();
+        if (sym.Equals('('))
+        {
+          StringBuilder localBuilder  = new StringBuilder();
+
+          // <parameterList>
+          OpenTag(localBuilder, "parameters", depth+1, false);
+
+          bool success = CompileSymbol(localBuilder, '(', depth + 1);
+
+          // Look ahead for non-empty parameter list
+          if(_tokenizer.LookAheadTokenType() != TokenType.SYMBOL)
           {
-            char c = _tokenizer.NextValue<char>();
-            if(c.Equals('.'))
+
+            AdvanceStreamWithException();
+
+            while(_tokenizer.HasMoreTokens())
             {
-              _tokenizer.Advance();
-              BuildIdentifier(idBuilder, TokenType.SYMBOL);
+              // <parameter>
+              OpenTag(localBuilder, "parameter", depth+2, false);
+
+              BuildGeneralStatement(localBuilder, depth+3, ',', ')');
+
+              // </parameter>
+              CloseTag(localBuilder, "parameter", depth+2);
+
+              tt = _tokenizer.LookAheadTokenType();
+              if(tt == TokenType.SYMBOL)
+              {
+                sym = _tokenizer.LookAheadValue<char>();
+                if(sym.Equals(')'))
+                {
+                  break;
+                }
+              }
+
+              // Advance once to move onto the termianting comma
+              AdvanceStreamWithException();
+
+              CompileSymbol(localBuilder, ',', depth+2);
+
+              // Advance again to move onto the next paramter
+              AdvanceStreamWithException();
             }
           }
-        }
-      }
-      else if(expectedTokenType == TokenType.SYMBOL)
-      {
-        idBuilder.Append(_tokenizer.CurrentValue<char>());
-        if(_tokenizer.HasMoreTokens())
-        {
-          if(_tokenizer.NextTokenType() == TokenType.IDENTIFIER)
+       
+          AdvanceStreamWithException();
+
+          success &= CompileSymbol(localBuilder, ')', depth + 1);
+
+          if(success == false)
           {
-            _tokenizer.Advance();
-            BuildIdentifier(idBuilder, TokenType.IDENTIFIER);
+            Console.WriteLine(localBuilder.ToString());
+            throw new Exception(Constants.SyntaxError);
           }
+
+          //</parameterList>
+          CloseTag(localBuilder, "parameters", depth+1);
+
+          tagBuilder.Append(localBuilder.ToString());
+
+          localBuilder.Clear();
+
+          return true;
         }
       }
+
+      return false;
     }
 
-    public void CompileFunctionDeclaration()
+    private void CompileIfStatement()
     {
     }
 
-    public void CompileFunctionBody()
+    private void CompileForLoop()
     {
     }
 
-    public void CompileParameterList()
+    private bool CompileFunctionCall(StringBuilder tagBuilder, int depth)
     {
-    }
+      TokenType tt = _tokenizer.GetTokenType();
 
-    public void CompileIfStatement()
-    {
-    }
+      if(tt == TokenType.IDENTIFIER)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+        
+        // <functioncall>
+        OpenTag(localBuilder, "functionCall", depth+1, false);
 
-    public void CompileSwitchStatement()
-    {
-    }
+        StringBuilder idBuilder = new StringBuilder();
+        BuildIdentifier(idBuilder, TokenType.IDENTIFIER);
+        InLineTags(localBuilder, TokenType.IDENTIFIER.ToString(), idBuilder.ToString(), depth+2);
 
-    public void CompileForStatement()
-    {
-    }
 
-    public void CompileForEachStatement()
-    {
-    }
+        BuildGeneralStatement(localBuilder, depth+2, ';');
 
-    public void CompileWhileStatement()
-    {
-    }
+        AdvanceStreamWithException();
 
-    public void CompileDoStatement()
-    {
-    }
+        CompileSymbol(localBuilder, ';', depth+1);
 
-    public void CompileTryStatement()
-    {
-    }
+        // </functioncall>
+        CloseTag(localBuilder, "functionCall", depth+1);
 
-    public void CompileExpression()
-    {
-    }
+        tagBuilder.Append(localBuilder);
 
-    public void CompileReturn()
-    {
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
     private bool CompileKeyWord(StringBuilder tagBuilder, KeywordType keywordType, int depth)
     {
-      TokenType   tt = _tokenizer.CurrentTokenType();
-      KeywordType kt = _tokenizer.CurrentKeywordType();
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
 
       if(tt == TokenType.KEYWORD && kt == keywordType)
       {
-        string kStr = _tokenizer.CurrentValue<string>();
+        string kStr = _tokenizer.GetValue<string>();
         InLineTags(tagBuilder, tt.ToString(), kStr, depth);
         return true;
       }
@@ -345,8 +650,8 @@ namespace CSharpParser
 
     private bool CompileSymbol(StringBuilder tagBuilder, char symbol, int depth)
     {
-      TokenType tt = _tokenizer.CurrentTokenType();
-      char      cs = _tokenizer.CurrentValue<char>();
+      TokenType tt = _tokenizer.GetTokenType();
+      char      cs = _tokenizer.GetValue<char>();
 
       if(tt == TokenType.SYMBOL && cs.Equals(symbol))
       {
@@ -355,6 +660,301 @@ namespace CSharpParser
       }
 
       return false;
+    }
+
+    private bool CompileConstantValue(StringBuilder tagBuilder, int depth)
+    {
+      TokenType tt = _tokenizer.GetTokenType();
+      
+      if(tt == TokenType.NUMBER || tt == TokenType.STRING)
+      {
+        string constValue = _tokenizer.GetValue<string>();
+        constValue = constValue.Replace("\"",""); // strip quotes from strings.
+        InLineTags(tagBuilder, tt.ToString(), constValue, depth);
+
+        return true;
+      }
+
+      return false;
+    }
+
+    private void BuildIdentifier(StringBuilder idBuilder, TokenType expectedTokenType)
+    {
+      if(expectedTokenType == TokenType.IDENTIFIER)
+      {
+        idBuilder.Append(_tokenizer.GetValue<string>());
+        if(_tokenizer.LookAheadTokenType() == TokenType.SYMBOL)
+        {
+          char c = _tokenizer.LookAheadValue<char>();
+          if(c.Equals('.'))
+          {
+            _tokenizer.Advance();
+            BuildIdentifier(idBuilder, TokenType.SYMBOL);
+          }
+        }
+      }
+      else if(expectedTokenType == TokenType.SYMBOL)
+      {
+        idBuilder.Append(_tokenizer.GetValue<char>());
+        if(_tokenizer.LookAheadTokenType() == TokenType.IDENTIFIER)
+        {
+          _tokenizer.Advance();
+          BuildIdentifier(idBuilder, TokenType.IDENTIFIER);
+        }
+      }
+      else
+      {
+        return;
+      }
+    }
+
+    private void BuildGeneralStatement(StringBuilder tagBuilder, int depth, params char[] terminators)
+    {
+      TokenType tt = _tokenizer.GetTokenType();
+      
+      switch(tt)
+      {
+        case TokenType.KEYWORD:
+          KeywordType kt = _tokenizer.GetKeywordType();
+          CompileKeyWord(tagBuilder, kt, depth);
+          break;
+        case TokenType.IDENTIFIER:
+          CompileIdentifier(tagBuilder, depth);
+          break;
+        case TokenType.SYMBOL:
+          char sym = _tokenizer.GetValue<char>();
+          CompileSymbol(tagBuilder, sym, depth);
+          break;
+        case TokenType.NUMBER:
+        case TokenType.STRING:
+          CompileConstantValue(tagBuilder, depth);
+          break;
+      }
+
+      if(_tokenizer.LookAheadTokenType() == TokenType.SYMBOL)
+      {
+        char nextSym = _tokenizer.LookAheadValue<char>();
+        for(int i=0; i<terminators.Length; i++)
+        {
+          if (nextSym.Equals(terminators[i])) return;
+        }
+      }
+
+      AdvanceStreamWithException();
+
+      BuildGeneralStatement(tagBuilder, depth, terminators);
+    }
+
+    private bool TokenTypeLookAhead(int maxIterations, LookAheadMatch matchType, params TokenType[] tokeTypes)
+    {
+      int matchCount = 0;
+
+      for(int i=0; i<tokeTypes.Length; i++)
+      {
+        TokenType searchTt = tokeTypes[i];
+
+        for(int j=0; j<maxIterations; j++)
+        {
+          if(_tokenizer.HasTokenAt(j) == false) break;
+
+          TokenType lookAheadTt = _tokenizer.LookAheadTokenType(j);
+
+          if(searchTt == lookAheadTt)
+          {
+            switch(matchType)
+            {
+              case LookAheadMatch.ANY:
+                return true;
+              case LookAheadMatch.ALL:
+                if(++matchCount == tokeTypes.Length)
+                {
+                  return true;
+                }
+                break;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    private bool KeywordLookAhead(int maxIterations, LookAheadMatch matchType, params KeywordType[] keywordTypes)
+    {
+      int matchCount = 0;
+
+      for(int i=0; i<keywordTypes.Length; i++)
+      {
+        KeywordType searchKw = keywordTypes[i];
+
+        for(int j=0; j<maxIterations; j++)
+        {
+          if(_tokenizer.HasTokenAt(j) == false) break;
+
+          KeywordType lookAheadKw = _tokenizer.LookAheadKeywordType(j);
+
+          if(searchKw == lookAheadKw)
+          {
+            switch(matchType)
+            {
+              case LookAheadMatch.ANY:
+                return true;
+              case LookAheadMatch.ALL:
+                if(++matchCount == keywordTypes.Length)
+                {
+                  return true;
+                }
+                break;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    private bool SymbolLookAhead(int maxIterations, LookAheadMatch matchType, params char[] symbols)
+    {
+      int matchCount = 0;
+
+      for(int i=0; i<symbols.Length; i++)
+      {
+        char searchSym = symbols[i];
+
+        for(int j=0; j<maxIterations; j++)
+        {
+          if(_tokenizer.HasTokenAt(j) == false) break;
+          
+          TokenType tt = _tokenizer.LookAheadTokenType(j);
+
+          if(tt != TokenType.SYMBOL) continue;
+
+          char lookAheadSym = _tokenizer.LookAheadValue<char>(j);
+
+          if(searchSym == lookAheadSym)
+          {
+            switch(matchType)
+            {
+              case LookAheadMatch.ANY:
+                return true;
+              case LookAheadMatch.ALL:
+                if(++matchCount == symbols.Length)
+                {
+                  return true;
+                }
+                break;
+            }
+          }
+        }
+      }
+
+      return false;
+    }
+
+    private int GetAccessModifierCount()
+    {
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      int matchCount = 0;
+
+      if(IsAccessModifier(kt) || IsMemberModifier(kt)) matchCount++;
+
+      int index = 0;
+      while(_tokenizer.HasTokenAt(index))
+      {
+        tt = _tokenizer.LookAheadTokenType(index);
+        kt = _tokenizer.LookAheadKeywordType(index);
+
+        if(IsAccessModifier(kt) || IsMemberModifier(kt))
+        {
+          matchCount++;
+        }
+        else if(tt == TokenType.IDENTIFIER)
+        {
+          break;
+        }
+
+        index++;
+      }
+
+      return matchCount;
+    }
+
+    private int GetClassModifierCount()
+    {
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      int matchCount = 0;
+
+      if(IsClassModifier(kt)) matchCount++;
+
+      int index = 0;
+      while(_tokenizer.HasTokenAt(index))
+      {
+        kt = _tokenizer.LookAheadKeywordType(index);
+
+        if(IsClassModifier(kt))
+        {
+          matchCount++;
+        }
+        else if (tt == TokenType.IDENTIFIER)
+        {
+          break;
+        }
+
+        index++;
+      }
+
+      return matchCount;
+    }
+
+    private bool IsAccessModifier(KeywordType kt)
+    {
+      return
+        kt == KeywordType.PUBLIC    ||
+        kt == KeywordType.PRIVATE   ||
+        kt == KeywordType.INTERNAL  ||
+        kt == KeywordType.PROTECTED ||
+        kt == KeywordType.CONST     ||
+        kt == KeywordType.STATIC    ||
+        kt == KeywordType.SEALED;
+    }
+
+    private bool IsClassModifier(KeywordType kt)
+    {
+      return
+        kt == KeywordType.PARTIAL ||
+        kt == KeywordType.ABSTRACT;
+    }
+
+    private bool IsMemberModifier(KeywordType kt)
+    {
+      return
+        kt == KeywordType.ABSTRACT ||
+        kt == KeywordType.VIRTUAL  ||
+        kt == KeywordType.OVERRIDE;
+    }
+
+    private bool IsBuiltInType(KeywordType kt)
+    {
+      return
+        kt == KeywordType.SBYTE   ||
+        kt == KeywordType.BYTE    ||
+        kt == KeywordType.SHORT   ||
+        kt == KeywordType.USHORT  ||
+        kt == KeywordType.INT     ||
+        kt == KeywordType.UINT    ||
+        kt == KeywordType.LONG    ||
+        kt == KeywordType.ULONG   ||
+        kt == KeywordType.CHAR    ||
+        kt == KeywordType.STRING  ||
+        kt == KeywordType.FLOAT   ||
+        kt == KeywordType.DOUBLE  ||
+        kt == KeywordType.BOOL    ||
+        kt == KeywordType.DECIMAL ||
+        kt == KeywordType.OBJECT;
     }
 
     private void OpenTag(StringBuilder tagBuilder, string tagName, int depth, bool inLine)

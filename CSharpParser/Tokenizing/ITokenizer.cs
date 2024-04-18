@@ -6,12 +6,13 @@ namespace CSharpParser
   {
     bool        HasMoreTokens();
     void        Advance();
-    TokenType   CurrentTokenType();
-    TokenType   NextTokenType();
-    KeywordType CurrentKeywordType();
-    KeywordType NextKeywordType();
-    T           CurrentValue<T>();
-    T           NextValue<T>();
+    TokenType   GetTokenType();
+    KeywordType GetKeywordType();
+    T           GetValue<T>();
+    bool        HasTokenAt(int index);
+    TokenType   LookAheadTokenType(int index = 0);
+    KeywordType LookAheadKeywordType(int index = 0);
+    T           LookAheadValue<T>(int index = 0);
     Task        Start(string filePath);
   }
 }

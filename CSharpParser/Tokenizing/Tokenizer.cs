@@ -15,9 +15,8 @@ namespace CSharpParser
       public object value;
     }
 
-    private Queue<Token> _tokens;
+    private List<Token> _tokens;
     private Token _currentToken;
-    private Token _nextToken;
     private CommentType _commentType;
 
     #region Interface Methods
@@ -26,7 +25,7 @@ namespace CSharpParser
       using(StreamReader reader = new StreamReader(filePath))
       {
         string line;
-        _tokens = new Queue<Token>();
+        _tokens = new List<Token>();
         StringBuilder sb = new StringBuilder();
 
         while (reader.EndOfStream == false)
@@ -117,38 +116,43 @@ namespace CSharpParser
 
     public void Advance()
     {
-      _currentToken = _tokens.Dequeue();
-      _nextToken = HasMoreTokens() ? _tokens.Peek() : null;
+      _currentToken = _tokens[0];
+      _tokens.RemoveAt(0);
     }
 
-    public TokenType CurrentTokenType()
+    public TokenType GetTokenType()
     {
       return _currentToken.type;
     }
 
-    public TokenType NextTokenType()
-    {
-      return _nextToken != null ? _nextToken.type : TokenType.NONE;
-    }
-
-    public KeywordType CurrentKeywordType()
+    public KeywordType GetKeywordType()
     {
       return _currentToken.keyword;
     }
 
-    public KeywordType NextKeywordType()
-    {
-      return _nextToken != null ? _nextToken.keyword : KeywordType.NONE;
-    }
-
-    public T CurrentValue<T>()
+    public T GetValue<T>()
     {
       return (T)_currentToken.value;
     }
 
-    public T NextValue<T>()
+    public bool HasTokenAt(int index)
     {
-      return _nextToken != null ? (T)_nextToken.value : default(T);
+      return index < _tokens.Count;
+    }
+
+    public TokenType LookAheadTokenType(int index = 0)
+    {
+      return HasTokenAt(index) ? _tokens[index].type : TokenType.NONE;
+    }
+
+    public KeywordType LookAheadKeywordType(int index = 0)
+    {
+      return HasTokenAt(index) ? _tokens[index].keyword : KeywordType.NONE;
+    }
+
+    public T LookAheadValue<T>(int index = 0)
+    {
+      return HasTokenAt(index) ? (T)_tokens[index].value : default(T);
     }
     #endregion
 
@@ -167,23 +171,23 @@ namespace CSharpParser
       }
       else if(IsNumConst(strValue))
       {
-        t.type = TokenType.NUM_CONST;
+        t.type = TokenType.NUMBER;
       }
       else if(IsStringConst(strValue))
       {
-        t.type = TokenType.STRING_CONST;
+        t.type = TokenType.STRING;
       }
       else
       {
         t.type = TokenType.IDENTIFIER;
       }
 
-      _tokens.Enqueue(t);
+      _tokens.Add(t);
     }
 
     private void TokenizeSymbol(char c)
     {
-      _tokens.Enqueue(new Token { type = TokenType.SYMBOL, value = c});
+      _tokens.Add(new Token { type = TokenType.SYMBOL, value = c});
     }
     #endregion
 

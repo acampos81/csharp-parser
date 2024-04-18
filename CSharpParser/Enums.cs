@@ -29,8 +29,8 @@
     KEYWORD,
     SYMBOL,
     IDENTIFIER,
-    NUM_CONST,
-    STRING_CONST
+    NUMBER,
+    STRING
   }
 
   public enum KeywordType
@@ -110,6 +110,7 @@
     UNSAFE,
     USHORT,
     USING,
+    VAR,
     VIRTUAL,
     VOID,
     VOLATILE,
@@ -121,5 +122,12 @@
     NONE,
     LINE,
     BLOCK
+  }
+
+  [System.Flags]
+  public enum LookAheadMatch
+  {
+    ALL,
+    ANY
   }
 }
