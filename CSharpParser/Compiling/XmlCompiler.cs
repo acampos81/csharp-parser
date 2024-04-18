@@ -19,7 +19,9 @@ namespace CSharpParser
     {
       try
       {
-        CompileClassStatements(_tagBuilder, 0);
+        Task compileTask = Task.Run(()=> { CompileClassStatementsAsync(_tagBuilder, 0); });
+        
+        await compileTask.ConfigureAwait(false);
 
         if(_tagBuilder.Length > 0)
         {
@@ -33,8 +35,9 @@ namespace CSharpParser
       }
     }
 
-    private void CompileClassStatements(StringBuilder tagBuilder, int depth)
+    private void CompileClassStatementsAsync(StringBuilder tagBuilder, int depth)
     {
+
       if(_tokenizer.HasMoreTokens())
       {
         _tokenizer.Advance();
@@ -46,13 +49,14 @@ namespace CSharpParser
             CompileClassVariableDeclaration(tagBuilder, depth) ||
             CompileFunctionDeclaration(tagBuilder, depth))
         {
-          CompileClassStatements(tagBuilder, depth);
+          CompileClassStatementsAsync(tagBuilder, depth);
         }
       }
     }
 
-    private void CompileFunctionStatements(StringBuilder tagBuilder, int depth)
+    private void CompileFunctionStatementsAsync(StringBuilder tagBuilder, int depth)
     {
+
       if(_tokenizer.HasMoreTokens())
       {
         _tokenizer.Advance();
@@ -62,7 +66,7 @@ namespace CSharpParser
             CompileForLoop(tagBuilder, depth)                  ||
             CompileGeneralStatement(tagBuilder, depth))
         {
-          CompileFunctionStatements(tagBuilder, depth);
+          CompileFunctionStatementsAsync(tagBuilder, depth);
         }
       }
     }
@@ -88,10 +92,10 @@ namespace CSharpParser
 
           if(sequenceType == SequenceType.CLASS)
           {
-            CompileClassStatements(localBuilder, depth+2);
+            CompileClassStatementsAsync(localBuilder, depth+2);
           }else
           {
-            CompileFunctionStatements(localBuilder, depth+2);
+            CompileFunctionStatementsAsync(localBuilder, depth+2);
           }
 
           if(CompileSymbol(localBuilder, '}', depth+1) == false)
