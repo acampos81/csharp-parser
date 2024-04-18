@@ -41,18 +41,12 @@ namespace CSharpParser
       {
         _tokenizer.Advance();
 
-        if( 
-            CompileUsingDirective(tagBuilder, depth)           ||
+        if( CompileUsingDirective(tagBuilder, depth)           ||
             CompileNamespaceDeclaration(tagBuilder, depth)     ||
             CompileClassDeclaration(tagBuilder, depth)         ||
             CompileClassConstructor(tagBuilder, depth)         ||
             CompileClassVariableDeclaration(tagBuilder, depth) ||
-            CompileFunctionDeclaration(tagBuilder, depth)      ||
-            CompileLocalVariableDeclaration(tagBuilder, depth) ||
-            //CompileIfStatement(tagBuilder, depth)              ||
-            //CompileForLoop(tagBuilder, depth)                  ||
-            CompileFunctionCall(tagBuilder, depth)
-            )
+            CompileFunctionDeclaration(tagBuilder, depth))
         {
           CompileClassStatements(tagBuilder, depth);
         }
@@ -61,10 +55,21 @@ namespace CSharpParser
 
     private void CompileFunctionStatements(StringBuilder tagBuilder, int depth)
     {
+      if(_tokenizer.HasMoreTokens())
+      {
+        _tokenizer.Advance();
 
+        if( CompileLocalVariableDeclaration(tagBuilder, depth) ||
+            CompileIfStatement(tagBuilder, depth)              ||
+            CompileForLoop(tagBuilder, depth)                  ||
+            CompileGeneralStatement(tagBuilder, depth))
+        {
+          CompileFunctionStatements(tagBuilder, depth);
+        }
+      }
     }
 
-    private bool CompileStatementSequence(StringBuilder tagBuilder, int depth)
+    private bool CompileStatementSequence(StringBuilder tagBuilder, SequenceType sequenceType, int depth)
     {
       TokenType tt = _tokenizer.GetTokenType();
 
@@ -83,7 +88,13 @@ namespace CSharpParser
             throw new Exception(Constants.SyntaxError);
           }
 
-          CompileClassStatements(localBuilder, depth+1);
+          if(sequenceType == SequenceType.CLASS)
+          {
+            CompileClassStatements(localBuilder, depth+2);
+          }else
+          {
+            CompileFunctionStatements(localBuilder, depth+2);
+          }
 
           if(CompileSymbol(localBuilder, '}', depth+1) == false)
           {
@@ -169,7 +180,7 @@ namespace CSharpParser
 
         AdvanceStreamWithException();
 
-        success &= CompileStatementSequence(localBuilder, depth+1);
+        success &= CompileStatementSequence(localBuilder, SequenceType.CLASS, depth+1);
 
         if(success == false)
         {
@@ -237,7 +248,7 @@ namespace CSharpParser
           AdvanceStreamWithException();
         }
 
-        success &= CompileStatementSequence(localBuilder, depth+1);
+        success &= CompileStatementSequence(localBuilder, SequenceType.CLASS,  depth+1);
 
         if(success == false)
         {
@@ -319,7 +330,7 @@ namespace CSharpParser
           }
         }
 
-        success &= CompileStatementSequence(localBuilder, depth+1);
+        success &= CompileStatementSequence(localBuilder, SequenceType.FUNCTION, depth+1);
 
         if(success == false)
         {
@@ -394,7 +405,8 @@ namespace CSharpParser
       bool isLocalVariableSyntax = false;
       if(tt == TokenType.IDENTIFIER)
       {
-        isLocalVariableSyntax = SymbolLookAhead(maxIterations:1, LookAheadMatch.ANY, '=');
+        int lookAheadCount = GetIdentifierCount('.');
+        isLocalVariableSyntax = SymbolLookAhead(maxIterations:lookAheadCount+1, LookAheadMatch.ANY, '=');
       }
       else if(tt == TokenType.KEYWORD)
       {
@@ -410,7 +422,7 @@ namespace CSharpParser
         // <variable>
         OpenTag(localBuilder, "variable", depth+1, false);
 
-        BuildGeneralStatement(localBuilder, depth+1, ';');
+        BuildGeneralStatement(localBuilder, depth+2, ';');
 
         AdvanceStreamWithException();
 
@@ -493,7 +505,7 @@ namespace CSharpParser
 
         AdvanceStreamWithException();
 
-        success &= CompileStatementSequence(localBuilder, depth+1);
+        success &= CompileStatementSequence(localBuilder, SequenceType.FUNCTION,  depth+1);
 
         if(success == false)
         {
@@ -590,29 +602,125 @@ namespace CSharpParser
       return false;
     }
 
-    private void CompileIfStatement()
+    private bool CompileIfStatement(StringBuilder tagBuilder, int depth)
     {
+      TokenType tt   = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      if(tt == TokenType.KEYWORD && kt == KeywordType.IF)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+
+         // <ifStatement>
+        OpenTag(localBuilder, "ifStatement", depth, false);
+
+        bool success = CompileKeyWord(localBuilder, kt, depth+1);
+
+        AdvanceStreamWithException();
+
+        // <expression>
+        OpenTag(localBuilder, "expression", depth+1, false);
+
+        success  &= CompileSymbol(localBuilder, '(', depth+1);
+
+        AdvanceStreamWithException();
+
+        BuildGeneralStatement(localBuilder, depth+2, ')');
+
+        AdvanceStreamWithException();
+
+        success  &= CompileSymbol(localBuilder, ')', depth+1);
+
+        // </expression>
+        CloseTag(localBuilder, "expression", depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileStatementSequence(localBuilder, SequenceType.FUNCTION, depth+1);
+
+        if(success == false)
+        {
+          throw new Exception(Constants.SyntaxError);
+        }
+
+        // </ifStatment>
+        CloseTag(localBuilder, "ifStatement", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
-    private void CompileForLoop()
+    private bool CompileForLoop(StringBuilder tagBuilder, int depth)
     {
+      TokenType tt   = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      if(tt == TokenType.KEYWORD && kt == KeywordType.FOR)
+      {
+        StringBuilder localBuilder = new StringBuilder();
+
+         // <forLoop>
+        OpenTag(localBuilder, "forLoop", depth, false);
+
+        bool success = CompileKeyWord(localBuilder, kt, depth+1);
+
+        AdvanceStreamWithException();
+
+        // <expression>
+        OpenTag(localBuilder, "expression", depth+1, false);
+
+        success  &= CompileSymbol(localBuilder, '(', depth+1);
+
+        AdvanceStreamWithException();
+
+        BuildGeneralStatement(localBuilder, depth+2, ')');
+
+        AdvanceStreamWithException();
+
+        success  &= CompileSymbol(localBuilder, ')', depth+1);
+
+        // </expression>
+        CloseTag(localBuilder, "expression", depth+1);
+
+        AdvanceStreamWithException();
+
+        success &= CompileStatementSequence(localBuilder, SequenceType.FUNCTION, depth+1);
+
+        if(success == false)
+        {
+          throw new Exception(Constants.SyntaxError);
+        }
+
+        // </forLoop>
+        CloseTag(localBuilder, "forLoop", depth);
+
+        tagBuilder.Append(localBuilder.ToString());
+
+        localBuilder.Clear();
+
+        return true;
+      }
+
+      return false;
     }
 
-    private bool CompileFunctionCall(StringBuilder tagBuilder, int depth)
+    private bool CompileGeneralStatement(StringBuilder tagBuilder, int depth)
     {
-      TokenType tt = _tokenizer.GetTokenType();
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
 
-      if(tt == TokenType.IDENTIFIER)
+      if(tt == TokenType.IDENTIFIER || tt == TokenType.KEYWORD)
       {
         StringBuilder localBuilder = new StringBuilder();
         
-        // <functioncall>
-        OpenTag(localBuilder, "functionCall", depth+1, false);
-
-        StringBuilder idBuilder = new StringBuilder();
-        BuildIdentifier(idBuilder, TokenType.IDENTIFIER);
-        InLineTags(localBuilder, TokenType.IDENTIFIER.ToString(), idBuilder.ToString(), depth+2);
-
+        // <statement>
+        OpenTag(localBuilder, "statement", depth+1, false);
 
         BuildGeneralStatement(localBuilder, depth+2, ';');
 
@@ -620,8 +728,8 @@ namespace CSharpParser
 
         CompileSymbol(localBuilder, ';', depth+1);
 
-        // </functioncall>
-        CloseTag(localBuilder, "functionCall", depth+1);
+        // </statement>
+        CloseTag(localBuilder, "statement", depth+1);
 
         tagBuilder.Append(localBuilder);
 
@@ -902,6 +1010,36 @@ namespace CSharpParser
         else if (tt == TokenType.IDENTIFIER)
         {
           break;
+        }
+
+        index++;
+      }
+
+      return matchCount;
+    }
+
+    private int GetIdentifierCount(char separator)
+    {
+      TokenType   tt = _tokenizer.GetTokenType();
+      KeywordType kt = _tokenizer.GetKeywordType();
+
+      int matchCount = 0;
+
+      if(tt == TokenType.IDENTIFIER) matchCount++;
+
+      int index = 0;
+      while(_tokenizer.HasTokenAt(index))
+      {
+        tt = _tokenizer.LookAheadTokenType(index);
+
+        if(tt == TokenType.IDENTIFIER)
+        {
+          matchCount++;
+        }
+        else if(tt == TokenType.SYMBOL)
+        {
+          char sym = _tokenizer.LookAheadValue<char>(index);
+          if(sym != separator) break;
         }
 
         index++;

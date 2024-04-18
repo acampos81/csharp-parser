@@ -1,28 +1,5 @@
 ﻿namespace CSharpParser
 {
-  public enum NonTerminals
-  {
-    USING_DIRECTIVE,
-    NAMESPACE,
-    CLASS,
-    CLASS_VAR_DECLARATION,
-    CONSTRUCTOR_DECLARATION,
-    CONTRUCTOR_BODY,
-    FUNCTION_DECLRATION,
-    FUNCTION_BODY,
-    PARAMETER_LIST,
-    LOCAL_VAR_DECLARATION,
-    STATEMENTS,
-    IF_STATEMENT,
-    SWITCH_STATEMENT,
-    FOR_STATEMENT,
-    FOR_EACH_STATMENT,
-    WHILE_STATEMENT,
-    DO_STATEMENT,
-    EXPRESSION,
-    TERM
-  }
-
   public enum TokenType
   {
     NONE,
@@ -124,10 +101,15 @@
     BLOCK
   }
 
-  [System.Flags]
   public enum LookAheadMatch
   {
     ALL,
     ANY
+  }
+
+  public enum SequenceType
+  {
+    CLASS,
+    FUNCTION
   }
 }
